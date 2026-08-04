@@ -1,0 +1,7 @@
+Hermes OAuth Proxy
+
+Portions of this project are derived from the Hermes Agent subscription proxy:
+https://github.com/NousResearch/hermes-agent
+
+Hermes Agent copyright (c) 2025 Nous Research and is licensed under the MIT License.
+The derived source is redistributed under the same license.

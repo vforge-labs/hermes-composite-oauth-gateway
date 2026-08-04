@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-oauth-proxy"
+version = "0.1.0"
+description = "Loopback OAuth subscription proxy backed by Hermes Agent credentials"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "vforge-labs" }]
+dependencies = ["aiohttp>=3.9"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Internet :: Proxy Servers",
+]
+
+[project.scripts]
+hermes-oauth-proxy = "hermes_oauth_proxy.cli:main"
+
+[project.urls]
+Repository = "https://github.com/vforge-labs/hermes-oauth-proxy"
+Issues = "https://github.com/vforge-labs/hermes-oauth-proxy/issues"
+
+[tool.setuptools.packages.find]
+include = ["hermes_oauth_proxy*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

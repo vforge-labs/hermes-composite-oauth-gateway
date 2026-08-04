@@ -1,0 +1,15 @@
+[Unit]
+Description=Hermes OAuth Subscription Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+Environment=HERMES_HOME=%h/.hermes
+WorkingDirectory=%h
+ExecStart=%h/.local/bin/hermes-oauth-proxy start --provider xai --host 127.0.0.1 --port 8645
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
