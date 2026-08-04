@@ -36,7 +36,7 @@ class XAIGrokAdapter(UpstreamAdapter):
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._pool: Optional[CredentialPool] = None
+
 
     @property
     def name(self) -> str:
@@ -53,6 +53,9 @@ class XAIGrokAdapter(UpstreamAdapter):
     def is_authenticated(self) -> bool:
         pool = self._load_pool()
         return bool(pool and pool.has_available())
+
+    def owns_model(self, model: str) -> bool:
+        return str(model or "").strip().lower().startswith("grok-")
 
     def get_credential(self) -> UpstreamCredential:
         with self._lock:
@@ -71,7 +74,6 @@ class XAIGrokAdapter(UpstreamAdapter):
                     "`hermes auth add xai-oauth --type oauth`."
                 )
 
-            self._pool = pool
             return self._credential_from_entry(entry)
 
     def get_retry_credential(
@@ -84,7 +86,10 @@ class XAIGrokAdapter(UpstreamAdapter):
             return None
 
         with self._lock:
-            pool = self._pool or self._load_pool()
+            # Reload persisted pool state, then identify the exact failed entry
+            # by bearer. Concurrent requests must never refresh/exhaust whichever
+            # entry happened to be selected most recently.
+            pool = self._load_pool()
             if pool is None:
                 return None
 
@@ -92,11 +97,19 @@ class XAIGrokAdapter(UpstreamAdapter):
                 # Mark the rate-limited key with its 1-hour cooldown and rotate
                 # to the next available credential. Returns None when the pool
                 # has no other key to offer — the 429 will flow back to the client.
-                refreshed = pool.mark_exhausted_and_rotate(status_code=status_code)
+                refreshed = pool.mark_exhausted_and_rotate(
+                    status_code=status_code,
+                    api_key_hint=failed_credential.bearer,
+                )
             else:
-                refreshed = pool.try_refresh_current()
+                refreshed = pool.try_refresh_matching(
+                    api_key_hint=failed_credential.bearer,
+                )
                 if refreshed is None:
-                    refreshed = pool.mark_exhausted_and_rotate(status_code=status_code)
+                    refreshed = pool.mark_exhausted_and_rotate(
+                        status_code=status_code,
+                        api_key_hint=failed_credential.bearer,
+                    )
             if refreshed is None:
                 return None
 

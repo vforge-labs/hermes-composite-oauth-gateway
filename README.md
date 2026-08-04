@@ -1,46 +1,118 @@
 # Hermes OAuth Proxy
 
-A loopback-only OAuth subscription proxy backed by credentials managed by [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+A loopback-only, model-aware OAuth subscription gateway backed by credentials managed by [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
-This standalone source tree was extracted from Hermes Agent's built-in subscription proxy so it can evolve independently and later be contributed upstream. The initial `0.1.0` baseline supports xAI Grok OAuth and intentionally preserves the built-in proxy's credential-pool behavior.
+It lets multiple local Hermes profiles and sessions share canonical OAuth credentials without copying refresh tokens into every profile.
+
+## Current adapters
+
+| Adapter | Model ownership | Forwarded API paths | Credential source |
+|---|---|---|---|
+| xAI Grok OAuth | `grok-*` | `/v1/chat/completions`, `/v1/responses`, `/v1/models`, embeddings and image endpoints | Hermes `xai-oauth` pool |
+| OpenAI Codex OAuth | `gpt-*`, `codex-*` | `/v1/responses`, `/v1/models` | Hermes `openai-codex` pool |
+| Composite gateway | model-aware dispatch to both adapters | union of both adapters; merged `/v1/models` | both pools |
+
+The gateway never translates Chat Completions into Responses. Each logical Hermes provider must retain the API mode its upstream expects.
 
 ## Security boundary
 
-The proxy accepts any client bearer and replaces it with the selected Hermes-managed upstream credential. It therefore **must remain loopback-only** unless an operator adds a real authentication and network-security layer. Request bodies are forwarded, not logged.
+- The default listener is `127.0.0.1:8645`.
+- Non-loopback binding is rejected. There is no unsafe override.
+- Any client bearer value is discarded and replaced with the selected canonical OAuth access token.
+- Provider-owned headers such as `ChatGPT-Account-ID` and `originator` are stripped from client input and reconstructed from the selected Codex credential.
+- Refresh tokens and account state remain in Hermes Agent's credential store. They are not copied into this repository or consumer profiles.
+- Because any local client can use the proxy, do not expose it to a LAN, container bridge, reverse proxy, or public socket without adding real client authentication.
 
 ## Requirements
 
 - Python 3.11+
-- Hermes Agent installed in the same Python environment
+- Hermes Agent installed and authenticated
 - `aiohttp`
-- A Hermes-managed xAI OAuth login (`hermes auth add xai-oauth --type oauth`)
 
-## Development run
+Authenticate the canonical providers first:
+
+```bash
+hermes auth add xai-oauth
+hermes auth add openai-codex
+```
+
+## Install from a checkout
+
+Install into the same Python environment that provides Hermes Agent's `agent` and `hermes_cli` packages:
+
+```bash
+python -m pip install .
+```
+
+For source-tree development, include both repositories on `PYTHONPATH`:
 
 ```bash
 export PYTHONPATH=/path/to/hermes-agent:/path/to/hermes-oauth-proxy
-python -m hermes_oauth_proxy providers
-python -m hermes_oauth_proxy start --provider xai --host 127.0.0.1 --port 8645
+python -m hermes_oauth_proxy status
 ```
 
-Clients use an OpenAI-compatible endpoint:
+## Run safely
 
-```text
-Base URL: http://127.0.0.1:8645/v1
-API key:  any non-empty local placeholder
+Prove the new gateway on a temporary loopback port before changing any service:
+
+```bash
+hermes-oauth-proxy start \
+  --provider composite \
+  --host 127.0.0.1 \
+  --port 18645
 ```
 
-## Service example
+Check health and merged discovery:
 
-See [`examples/hermes-oauth-proxy.service`](examples/hermes-oauth-proxy.service). Replace placeholders with installation-specific paths. Do not expose the listener on `0.0.0.0` by default.
+```bash
+curl -fsS http://127.0.0.1:18645/health
+curl -fsS -H 'Authorization: Bearer local-placeholder' \
+  http://127.0.0.1:18645/v1/models
+```
 
-## Roadmap
+The placeholder bearer is required by some OpenAI-compatible clients but is never forwarded upstream.
 
-- OpenAI Codex OAuth adapter
-- Composite model-aware routing behind one listener
-- Merged model catalog
-- Additional protocol-compatible OAuth adapters
+## Hermes provider configuration
 
-## Provenance and license
+Keep two logical providers even though they share one listener:
 
-The baseline proxy implementation is derived from Hermes Agent, copyright Nous Research, under the MIT License. See [NOTICE](NOTICE) and [LICENSE](LICENSE). This community-maintained repository is not an official Nous Research release.
+```yaml
+providers:
+  xai-oauth-proxy:
+    api: http://127.0.0.1:8645/v1
+    api_key: local-placeholder
+    transport: chat_completions
+
+  openai-codex-proxy:
+    api: http://127.0.0.1:8645/v1
+    api_key: local-placeholder
+    transport: codex_responses
+```
+
+Use `xai-oauth-proxy/grok-*` for Grok and `openai-codex-proxy/gpt-*` for Codex. The model-aware gateway remains the final routing authority.
+
+## Codex request contract
+
+The ChatGPT Codex backend is not ordinary OpenAI Chat Completions:
+
+- send Responses requests to `/v1/responses`;
+- include `model`, `instructions`, and Responses-format `input`;
+- set `store: false`;
+- set `stream: true`;
+- do not assume every public OpenAI Responses parameter is accepted. In the verified backend, `max_output_tokens` was rejected.
+
+The proxy forwards this contract transparently. It does not silently rewrite invalid payloads.
+
+## Verification
+
+```bash
+python -m pytest -q
+ruff check .
+python -m build --wheel
+```
+
+The test suite uses synthetic credentials only. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) for temporary-port live acceptance and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for routing and refresh behavior.
+
+## Provenance
+
+The initial xAI proxy modules were extracted from Hermes Agent and retain the upstream MIT license. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).

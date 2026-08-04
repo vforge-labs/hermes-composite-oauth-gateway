@@ -3,9 +3,15 @@
 from typing import Dict, Type
 
 from hermes_oauth_proxy.adapters.base import UpstreamAdapter
+from hermes_oauth_proxy.adapters.composite import CompositeOAuthAdapter
+from hermes_oauth_proxy.adapters.openai_codex import OpenAICodexAdapter
 from hermes_oauth_proxy.adapters.xai import XAIGrokAdapter
 
-ADAPTERS: Dict[str, Type[UpstreamAdapter]] = {"xai": XAIGrokAdapter}
+ADAPTERS: Dict[str, Type[UpstreamAdapter]] = {
+    "composite": CompositeOAuthAdapter,
+    "openai-codex": OpenAICodexAdapter,
+    "xai": XAIGrokAdapter,
+}
 
 
 def get_adapter(name: str) -> UpstreamAdapter:

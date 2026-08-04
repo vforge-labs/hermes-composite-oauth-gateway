@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import FrozenSet, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 
 @dataclass(frozen=True)
@@ -94,6 +94,42 @@ class UpstreamAdapter(ABC):
         """
         _ = failed_credential, status_code
         return None
+
+    def request_headers(self, credential: UpstreamCredential) -> Dict[str, str]:
+        """Return provider-required headers in addition to Authorization.
+
+        The proxy applies these after filtering inbound headers, so clients
+        cannot override provider account or origin identity.
+        """
+        _ = credential
+        return {}
+
+    def allowed_methods(self, rel_path: str) -> FrozenSet[str]:
+        """Return accepted client methods for one forwarded path."""
+        return frozenset({"GET"}) if rel_path == "/models" else frozenset({"POST"})
+
+    def owns_model(self, model: str) -> bool:
+        """Return whether this adapter owns *model* in a composite router."""
+        _ = model
+        return False
+
+    def models_query_string(self) -> str:
+        """Provider-required query string for its model-catalog endpoint."""
+        return ""
+
+    def extract_model_ids(self, payload: Any) -> List[str]:
+        """Normalize an upstream model response into model identifiers."""
+        if not isinstance(payload, dict):
+            return []
+        entries = payload.get("data")
+        if not isinstance(entries, list):
+            return []
+        model_ids: List[str] = []
+        for entry in entries:
+            model_id = entry.get("id") if isinstance(entry, dict) else None
+            if isinstance(model_id, str) and model_id.strip():
+                model_ids.append(model_id.strip())
+        return model_ids
 
     def describe(self) -> str:
         """One-line status summary for ``proxy status``."""

@@ -12,9 +12,11 @@ or rewrite request/response bodies. It's a credential-attaching forwarder.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import json
 import logging
 import signal
-from typing import Optional
+from typing import Any, Optional
 
 try:
     import aiohttp
@@ -45,6 +47,8 @@ _HOP_BY_HOP_HEADERS = frozenset(
         "transfer-encoding",
         "upgrade",
         "authorization",  # we replace this one
+        "chatgpt-account-id",  # selected Codex credential owns this value
+        "originator",  # selected provider adapter owns this value
     }
 )
 
@@ -54,6 +58,16 @@ DEFAULT_HOST = "127.0.0.1"
 # conversations can be large; mirror api_server's MAX_REQUEST_BYTES (10 MB).
 # client_max_size bounds every read path, including chunked bodies.
 MAX_REQUEST_BYTES = 10_000_000
+
+
+def is_loopback_host(host: str) -> bool:
+    normalized = str(host or "").strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
 
 
 def _json_error(status: int, message: str, code: str = "proxy_error") -> "web.Response":
@@ -85,6 +99,117 @@ def _filter_response_headers(headers) -> dict:
     return out
 
 
+def _select_request_adapter(
+    root_adapter: UpstreamAdapter,
+    rel_path: str,
+    body: bytes,
+) -> UpstreamAdapter:
+    selector = getattr(root_adapter, "select_adapter", None)
+    if callable(selector):
+        return selector(rel_path, body)
+    return root_adapter
+
+
+async def _fetch_adapter_model_ids(
+    adapter: UpstreamAdapter,
+    timeout: "aiohttp.ClientTimeout",
+) -> list[str]:
+    """Fetch and normalize one authenticated adapter's model catalog."""
+    credential = await asyncio.to_thread(adapter.get_credential)
+
+    async def _request(active_credential: UpstreamCredential):
+        url = f"{active_credential.base_url.rstrip('/')}/models"
+        query = adapter.models_query_string()
+        if query:
+            url = f"{url}?{query}"
+        headers = {
+            "Authorization": f"{active_credential.token_type} {active_credential.bearer}",
+            "Accept": "application/json",
+            **adapter.request_headers(active_credential),
+        }
+        session = aiohttp.ClientSession(timeout=timeout)
+        try:
+            response = await session.get(url, headers=headers, allow_redirects=False)
+        except Exception:
+            await session.close()
+            raise
+        return session, response
+
+    session, response = await _request(credential)
+    try:
+        if response.status in {401, 429}:
+            retry_credential = await asyncio.to_thread(
+                adapter.get_retry_credential,
+                failed_credential=credential,
+                status_code=response.status,
+            )
+            if retry_credential is not None:
+                response.release()
+                await session.close()
+                session, response = await _request(retry_credential)
+        if response.status != 200:
+            raise RuntimeError(f"{adapter.name} model catalog returned HTTP {response.status}")
+        payload: Any = json.loads(await response.read())
+        return adapter.extract_model_ids(payload)
+    finally:
+        response.release()
+        await session.close()
+
+
+async def _merged_model_response(root_adapter: UpstreamAdapter) -> "web.Response":
+    adapters = tuple(getattr(root_adapter, "model_adapters", ()))
+    timeout = aiohttp.ClientTimeout(total=30, sock_connect=15, sock_read=20)
+    results = await asyncio.gather(
+        *(_fetch_adapter_model_ids(adapter, timeout) for adapter in adapters),
+        return_exceptions=True,
+    )
+
+    catalogs = {}
+    failures = []
+    for adapter, result in zip(adapters, results):
+        if isinstance(result, BaseException):
+            failures.append(adapter.name)
+            logger.warning("proxy: %s model catalog fetch failed: %s", adapter.name, result)
+            continue
+        catalogs[adapter.name] = list(result)
+
+    # Advertise only IDs that this router can send back to exactly one
+    # provider. This prevents discovery from promising unroutable or ambiguous
+    # models when an upstream catalog changes naming conventions.
+    owners: dict[str, list[str]] = {}
+    for adapter in adapters:
+        for model_id in catalogs.get(adapter.name, []):
+            if adapter.owns_model(model_id):
+                owners.setdefault(model_id, []).append(adapter.name)
+
+    data = []
+    seen = set()
+    for adapter in adapters:
+        for model_id in catalogs.get(adapter.name, []):
+            if model_id in seen or owners.get(model_id) != [adapter.name]:
+                continue
+            seen.add(model_id)
+            data.append(
+                {
+                    "id": model_id,
+                    "object": "model",
+                    "created": 0,
+                    "owned_by": adapter.name,
+                }
+            )
+
+    if failures and len(failures) == len(adapters):
+        return _json_error(
+            502,
+            "All configured upstream model catalogs failed",
+            code="model_catalog_unavailable",
+        )
+    headers = {}
+    if failures:
+        headers["X-Hermes-Proxy-Partial"] = ",".join(failures)
+    return web.json_response({"object": "list", "data": data}, headers=headers)
+
+
 def create_app(adapter: UpstreamAdapter) -> "web.Application":
     """Build the aiohttp application bound to a specific upstream adapter."""
     if not AIOHTTP_AVAILABLE:
@@ -99,13 +224,26 @@ def create_app(adapter: UpstreamAdapter) -> "web.Application":
     app[_adapter_key] = adapter
 
     async def handle_health(request: "web.Request") -> "web.Response":
-        return web.json_response(
-            {
-                "status": "ok",
-                "upstream": adapter.display_name,
-                "authenticated": adapter.is_authenticated(),
+        model_adapters = tuple(getattr(adapter, "model_adapters", ()))
+        if model_adapters:
+            readiness = await asyncio.gather(
+                *(asyncio.to_thread(item.is_authenticated) for item in model_adapters)
+            )
+            upstreams = {
+                item.name: ready for item, ready in zip(model_adapters, readiness)
             }
-        )
+            authenticated = all(readiness)
+        else:
+            upstreams = None
+            authenticated = await asyncio.to_thread(adapter.is_authenticated)
+        body = {
+            "status": "ok",
+            "upstream": adapter.display_name,
+            "authenticated": authenticated,
+        }
+        if upstreams is not None:
+            body["upstreams"] = upstreams
+        return web.json_response(body)
 
     async def handle_proxy(request: "web.Request") -> "web.StreamResponse":
         # Extract the path *after* /v1
@@ -121,11 +259,13 @@ def create_app(adapter: UpstreamAdapter) -> "web.Application":
                 code="path_not_allowed",
             )
 
-        try:
-            cred = adapter.get_credential()
-        except Exception as exc:
-            logger.warning("proxy: credential resolution failed: %s", exc)
-            return _json_error(401, str(exc), code="upstream_auth_failed")
+        allowed_methods = adapter.allowed_methods(rel_path)
+        if request.method not in allowed_methods:
+            return _json_error(
+                405,
+                f"Method {request.method} is not allowed for /v1{rel_path}",
+                code="method_not_allowed",
+            )
 
         # Forward body verbatim. Read into memory once — request bodies for
         # chat/completions/embeddings are small (<1MB typically). If we ever
@@ -133,16 +273,49 @@ def create_app(adapter: UpstreamAdapter) -> "web.Application":
         # the request body too.
         body = await request.read()
 
+        if rel_path == "/models" and getattr(adapter, "model_adapters", None):
+            return await _merged_model_response(adapter)
+
+        try:
+            active_adapter = _select_request_adapter(adapter, rel_path, body)
+        except ValueError as exc:
+            return _json_error(400, str(exc), code="model_routing_failed")
+
+        if rel_path not in active_adapter.allowed_paths:
+            allowed = ", ".join(sorted(active_adapter.allowed_paths))
+            return _json_error(
+                404,
+                f"Path /v1{rel_path} is not forwarded by {active_adapter.display_name}. "
+                f"Allowed: {allowed}",
+                code="path_not_allowed",
+            )
+
+        try:
+            cred = await asyncio.to_thread(active_adapter.get_credential)
+        except Exception as exc:
+            logger.warning("proxy: credential resolution failed for %s: %s", active_adapter.name, exc)
+            return _json_error(
+                401,
+                f"Credentials for {active_adapter.display_name} are unavailable",
+                code="upstream_auth_failed",
+            )
+
         timeout = aiohttp.ClientTimeout(total=None, sock_connect=15, sock_read=300)
 
         async def _send_upstream(active_cred: UpstreamCredential):
             upstream_url = f"{active_cred.base_url.rstrip('/')}{rel_path}"
-            # Preserve query string verbatim.
+            query_parts = []
+            provider_query = active_adapter.models_query_string() if rel_path == "/models" else ""
+            if provider_query:
+                query_parts.append(provider_query)
             if request.query_string:
-                upstream_url = f"{upstream_url}?{request.query_string}"
+                query_parts.append(request.query_string)
+            if query_parts:
+                upstream_url = f"{upstream_url}?{'&'.join(query_parts)}"
 
             fwd_headers = _filter_request_headers(request.headers)
             fwd_headers["Authorization"] = f"{active_cred.token_type} {active_cred.bearer}"
+            fwd_headers.update(active_adapter.request_headers(active_cred))
 
             logger.debug(
                 "proxy: forwarding %s %s -> %s (body=%d bytes)",
@@ -171,13 +344,14 @@ def create_app(adapter: UpstreamAdapter) -> "web.Application":
             try:
                 return await _send_upstream(active_cred)
             except RuntimeError as exc:
-                return _json_error(500, str(exc)), None
+                logger.warning("proxy: upstream setup failed: %s", exc)
+                return _json_error(500, "upstream setup failed"), None
             except aiohttp.ClientError as exc:
                 logger.warning("proxy: upstream connection failed: %s", exc)
                 return (
                     _json_error(
                         502,
-                        f"upstream connection failed: {exc}",
+                        "upstream connection failed",
                         code="upstream_unreachable",
                     ),
                     None,
@@ -199,7 +373,8 @@ def create_app(adapter: UpstreamAdapter) -> "web.Application":
 
         if upstream_resp.status in {401, 429}:
             try:
-                retry_cred = adapter.get_retry_credential(
+                retry_cred = await asyncio.to_thread(
+                    active_adapter.get_retry_credential,
                     failed_credential=cred,
                     status_code=upstream_resp.status,
                 )
@@ -216,23 +391,27 @@ def create_app(adapter: UpstreamAdapter) -> "web.Application":
                 session = session_or_response
 
         # Stream response back. Headers first, then chunked body.
-        resp = web.StreamResponse(
-            status=upstream_resp.status,
-            headers=_filter_response_headers(upstream_resp.headers),
-        )
-        await resp.prepare(request)
-
         try:
+            resp = web.StreamResponse(
+                status=upstream_resp.status,
+                headers=_filter_response_headers(upstream_resp.headers),
+            )
+            await resp.prepare(request)
             async for chunk in upstream_resp.content.iter_any():
                 if chunk:
                     await resp.write(chunk)
-        except (aiohttp.ClientError, asyncio.CancelledError) as exc:
+        except asyncio.CancelledError:
+            raise
+        except aiohttp.ClientError as exc:
             logger.warning("proxy: streaming interrupted: %s", exc)
         finally:
             upstream_resp.release()
             await session.close()
 
-        await resp.write_eof()
+        try:
+            await resp.write_eof()
+        except (aiohttp.ClientError, asyncio.CancelledError, ConnectionResetError):
+            logger.debug("proxy: downstream closed before final EOF")
         return resp
 
     # /health doesn't go through the upstream
@@ -256,6 +435,10 @@ async def run_server(
     if not AIOHTTP_AVAILABLE:
         raise RuntimeError(
             "aiohttp is required for `hermes proxy`. Run `hermes setup` to install it."
+        )
+    if not is_loopback_host(host):
+        raise ValueError(
+            "Refusing non-loopback bind: this proxy has no client authentication"
         )
 
     app = create_app(adapter)
@@ -295,4 +478,5 @@ __all__ = [
     "DEFAULT_HOST",
     "DEFAULT_PORT",
     "AIOHTTP_AVAILABLE",
+    "is_loopback_host",
 ]

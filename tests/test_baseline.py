@@ -7,17 +7,29 @@ import pytest
 
 from hermes_oauth_proxy.adapters import ADAPTERS, get_adapter
 from hermes_oauth_proxy.adapters.base import UpstreamAdapter, UpstreamCredential
-from hermes_oauth_proxy.server import create_app
+from hermes_oauth_proxy.server import create_app, is_loopback_host
 
 
-def test_initial_registry_contains_only_xai():
-    assert set(ADAPTERS) == {"xai"}
+def test_registry_contains_individual_and_composite_adapters():
+    assert set(ADAPTERS) == {"composite", "openai-codex", "xai"}
     assert get_adapter("xai").name == "xai"
+    assert get_adapter("openai-codex").name == "openai-codex"
+    assert get_adapter("composite").name == "composite"
 
 
 def test_unknown_adapter_is_rejected():
     with pytest.raises(ValueError, match="Unknown proxy upstream provider"):
         get_adapter("synthetic")
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.2.3.4", "::1", "localhost"])
+def test_loopback_hosts_are_accepted(host):
+    assert is_loopback_host(host)
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.1", "proxy.example"])
+def test_non_loopback_hosts_are_rejected(host):
+    assert not is_loopback_host(host)
 
 
 aiohttp = pytest.importorskip("aiohttp")

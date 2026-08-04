@@ -8,7 +8,7 @@ import sys
 from typing import Sequence
 
 from hermes_oauth_proxy.adapters import ADAPTERS, get_adapter
-from hermes_oauth_proxy.server import DEFAULT_HOST, DEFAULT_PORT, run_server
+from hermes_oauth_proxy.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback_host, run_server
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     start = sub.add_parser("start", help="run the proxy in the foreground")
-    start.add_argument("--provider", choices=sorted(ADAPTERS), default="xai")
+    start.add_argument("--provider", choices=sorted(ADAPTERS), default="composite")
     start.add_argument("--host", default=DEFAULT_HOST)
     start.add_argument("--port", type=int, default=DEFAULT_PORT)
     sub.add_parser("status", help="show adapter authentication readiness")
@@ -30,6 +30,15 @@ def _status() -> int:
     print("Hermes OAuth proxy upstream adapters")
     for name in sorted(ADAPTERS):
         adapter = get_adapter(name)
+        authentication_status = getattr(adapter, "authentication_status", None)
+        if callable(authentication_status):
+            states = authentication_status()
+            summary = ", ".join(
+                f"{provider}={'ready' if ready else 'missing'}"
+                for provider, ready in states.items()
+            )
+            print(f"  [{name:12s}] {adapter.display_name} — {summary}")
+            continue
         if not adapter.is_authenticated():
             print(f"  [{name:12s}] {adapter.display_name} — not logged in")
             continue
@@ -51,6 +60,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "status":
         return _status()
+
+    if not is_loopback_host(args.host):
+        print(
+            "Refusing non-loopback bind: this proxy has no client authentication. "
+            "Use 127.0.0.1, ::1, or localhost.",
+            file=sys.stderr,
+        )
+        return 2
 
     adapter = get_adapter(args.provider)
     if not adapter.is_authenticated():
