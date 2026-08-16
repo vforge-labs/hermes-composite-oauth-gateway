@@ -27,7 +27,7 @@ except ImportError:
     web = None  # type: ignore[assignment]
     AIOHTTP_AVAILABLE = False
 
-from hermes_oauth_proxy.adapters.base import UpstreamAdapter, UpstreamCredential
+from hermes_composite_oauth_gateway.adapters.base import UpstreamAdapter, UpstreamCredential
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import FrozenSet, Iterable, Optional, Tuple
 
-from hermes_oauth_proxy.adapters.base import UpstreamAdapter, UpstreamCredential
+from hermes_composite_oauth_gateway.adapters.base import UpstreamAdapter, UpstreamCredential
 
 
 class CompositeOAuthAdapter(UpstreamAdapter):
@@ -13,8 +13,8 @@ class CompositeOAuthAdapter(UpstreamAdapter):
 
     def __init__(self, adapters: Optional[Iterable[UpstreamAdapter]] = None) -> None:
         if adapters is None:
-            from hermes_oauth_proxy.adapters.openai_codex import OpenAICodexAdapter
-            from hermes_oauth_proxy.adapters.xai import XAIGrokAdapter
+            from hermes_composite_oauth_gateway.adapters.openai_codex import OpenAICodexAdapter
+            from hermes_composite_oauth_gateway.adapters.xai import XAIGrokAdapter
 
             adapters = (XAIGrokAdapter(), OpenAICodexAdapter())
         self._adapters: Tuple[UpstreamAdapter, ...] = tuple(adapters)

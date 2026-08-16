@@ -1,4 +1,4 @@
-# Hermes OAuth Proxy
+# Hermes Composite OAuth Gateway
 
 A loopback-only, model-aware OAuth subscription gateway backed by credentials managed by [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
@@ -36,19 +36,21 @@ hermes auth add xai-oauth
 hermes auth add openai-codex
 ```
 
-## Install from a checkout
+## Install from GitHub
 
 Install into the same Python environment that provides Hermes Agent's `agent` and `hermes_cli` packages:
 
 ```bash
+git clone https://github.com/vforge-labs/hermes-composite-oauth-gateway.git
+cd hermes-composite-oauth-gateway
 python -m pip install .
 ```
 
 For source-tree development, include both repositories on `PYTHONPATH`:
 
 ```bash
-export PYTHONPATH=/path/to/hermes-agent:/path/to/hermes-oauth-proxy
-python -m hermes_oauth_proxy status
+export PYTHONPATH=/path/to/hermes-agent:/path/to/hermes-composite-oauth-gateway
+python -m hermes_composite_oauth_gateway status
 ```
 
 ## Run safely
@@ -56,7 +58,7 @@ python -m hermes_oauth_proxy status
 Prove the new gateway on a temporary loopback port before changing any service:
 
 ```bash
-hermes-oauth-proxy start \
+hermes-composite-oauth-gateway start \
   --provider composite \
   --host 127.0.0.1 \
   --port 18645
@@ -112,6 +114,8 @@ python -m build --wheel
 ```
 
 The test suite uses synthetic credentials only. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) for temporary-port live acceptance and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for routing and refresh behavior.
+
+Contributions should follow [`CONTRIBUTING.md`](CONTRIBUTING.md). Security issues belong in GitHub's private vulnerability-reporting surface; see [`SECURITY.md`](SECURITY.md).
 
 ## Provenance
 

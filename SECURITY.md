@@ -2,7 +2,7 @@
 
 ## Supported use
 
-Hermes OAuth Proxy is intended for a single-user machine and a loopback-only listener.
+Hermes Composite OAuth Gateway is intended for a single-user machine and a loopback-only listener.
 
 ## Important boundary
 
@@ -28,4 +28,6 @@ Those deployments require independent client authentication, authorization, rate
 
 ## Reporting
 
-Report vulnerabilities privately to the repository maintainer. Do not include live tokens, auth files, or account identifiers in reports.
+Use GitHub's private vulnerability reporting / Security Advisories for this repository. Do not open a public issue containing exploit details, live tokens, auth files, decoded claims, or account identifiers.
+
+Include the affected gateway and Hermes versions, installation method, minimal reproduction using synthetic credentials, impact, and any known mitigations.

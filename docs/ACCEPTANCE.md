@@ -17,7 +17,7 @@ Do not place credential-bearing rollback material in this repository.
 ## 2. Start separately
 
 ```bash
-hermes-oauth-proxy start --provider composite --host 127.0.0.1 --port 18645
+hermes-composite-oauth-gateway start --provider composite --host 127.0.0.1 --port 18645
 ```
 
 Do not stop or edit the production service.

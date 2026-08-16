@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=exec
 Environment=HERMES_HOME=%h/.hermes
 WorkingDirectory=%h
-ExecStart=%h/.local/bin/hermes-oauth-proxy start --provider composite --host 127.0.0.1 --port 8645
+ExecStart=%h/.local/bin/hermes-composite-oauth-gateway start --provider composite --host 127.0.0.1 --port 8645
 Restart=on-failure
 RestartSec=5
 

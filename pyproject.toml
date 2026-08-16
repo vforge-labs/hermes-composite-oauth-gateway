@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hermes-oauth-proxy"
+name = "hermes-composite-oauth-gateway"
 version = "0.1.0"
-description = "Loopback OAuth subscription proxy backed by Hermes Agent credentials"
+description = "Loopback-only multi-provider OAuth gateway for trusted Hermes Agent profiles"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -13,19 +13,22 @@ authors = [{ name = "vforge-labs" }]
 dependencies = ["aiohttp>=3.9"]
 classifiers = [
   "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.11",
   "Topic :: Internet :: Proxy Servers",
 ]
 
 [project.scripts]
-hermes-oauth-proxy = "hermes_oauth_proxy.cli:main"
+hermes-composite-oauth-gateway = "hermes_composite_oauth_gateway.cli:main"
 
 [project.urls]
-Repository = "https://github.com/vforge-labs/hermes-oauth-proxy"
-Issues = "https://github.com/vforge-labs/hermes-oauth-proxy/issues"
+Homepage = "https://github.com/vforge-labs/hermes-composite-oauth-gateway"
+Repository = "https://github.com/vforge-labs/hermes-composite-oauth-gateway"
+Issues = "https://github.com/vforge-labs/hermes-composite-oauth-gateway/issues"
 
 [tool.setuptools.packages.find]
-include = ["hermes_oauth_proxy*"]
+include = ["hermes_composite_oauth_gateway*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -8,11 +8,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from hermes_oauth_proxy.adapters.base import UpstreamAdapter, UpstreamCredential
-from hermes_oauth_proxy.adapters.composite import CompositeOAuthAdapter
-from hermes_oauth_proxy.adapters.openai_codex import OpenAICodexAdapter, _chatgpt_account_id
-from hermes_oauth_proxy.adapters.xai import XAIGrokAdapter
-from hermes_oauth_proxy.server import create_app
+from hermes_composite_oauth_gateway.adapters.base import UpstreamAdapter, UpstreamCredential
+from hermes_composite_oauth_gateway.adapters.composite import CompositeOAuthAdapter
+from hermes_composite_oauth_gateway.adapters.openai_codex import OpenAICodexAdapter, _chatgpt_account_id
+from hermes_composite_oauth_gateway.adapters.xai import XAIGrokAdapter
+from hermes_composite_oauth_gateway.server import create_app
 
 
 def _jwt(account_id: str) -> str:
@@ -35,7 +35,7 @@ def test_codex_account_id_and_headers_are_derived_from_selected_token():
     credential = UpstreamCredential(bearer=token, base_url="https://example.invalid/backend-api/codex")
     assert _chatgpt_account_id(token) == "acct-synthetic"
     assert adapter.request_headers(credential) == {
-        "User-Agent": "codex_cli_rs/0.0.0 (Hermes OAuth Proxy)",
+        "User-Agent": "codex_cli_rs/0.0.0 (Hermes Composite OAuth Gateway)",
         "originator": "codex_cli_rs",
         "ChatGPT-Account-ID": "acct-synthetic",
     }

@@ -2,10 +2,10 @@
 
 from typing import Dict, Type
 
-from hermes_oauth_proxy.adapters.base import UpstreamAdapter
-from hermes_oauth_proxy.adapters.composite import CompositeOAuthAdapter
-from hermes_oauth_proxy.adapters.openai_codex import OpenAICodexAdapter
-from hermes_oauth_proxy.adapters.xai import XAIGrokAdapter
+from hermes_composite_oauth_gateway.adapters.base import UpstreamAdapter
+from hermes_composite_oauth_gateway.adapters.composite import CompositeOAuthAdapter
+from hermes_composite_oauth_gateway.adapters.openai_codex import OpenAICodexAdapter
+from hermes_composite_oauth_gateway.adapters.xai import XAIGrokAdapter
 
 ADAPTERS: Dict[str, Type[UpstreamAdapter]] = {
     "composite": CompositeOAuthAdapter,

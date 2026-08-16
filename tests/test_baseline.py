@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from hermes_oauth_proxy.adapters import ADAPTERS, get_adapter
-from hermes_oauth_proxy.adapters.base import UpstreamAdapter, UpstreamCredential
-from hermes_oauth_proxy.server import create_app, is_loopback_host
+from hermes_composite_oauth_gateway.adapters import ADAPTERS, get_adapter
+from hermes_composite_oauth_gateway.adapters.base import UpstreamAdapter, UpstreamCredential
+from hermes_composite_oauth_gateway.server import create_app, is_loopback_host
 
 
 def test_registry_contains_individual_and_composite_adapters():

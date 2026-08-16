@@ -11,7 +11,7 @@ from typing import Any, Dict, FrozenSet, List, Optional
 from agent.credential_pool import CredentialPool, PooledCredential, load_pool
 from hermes_cli.auth import DEFAULT_CODEX_BASE_URL
 
-from hermes_oauth_proxy.adapters.base import UpstreamAdapter, UpstreamCredential
+from hermes_composite_oauth_gateway.adapters.base import UpstreamAdapter, UpstreamCredential
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class OpenAICodexAdapter(UpstreamAdapter):
 
     def request_headers(self, credential: UpstreamCredential) -> Dict[str, str]:
         headers = {
-            "User-Agent": "codex_cli_rs/0.0.0 (Hermes OAuth Proxy)",
+            "User-Agent": "codex_cli_rs/0.0.0 (Hermes Composite OAuth Gateway)",
             "originator": "codex_cli_rs",
         }
         account_id = _chatgpt_account_id(credential.bearer)

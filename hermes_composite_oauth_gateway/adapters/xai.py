@@ -9,7 +9,7 @@ from typing import FrozenSet, Optional
 from agent.credential_pool import CredentialPool, PooledCredential, load_pool
 from hermes_cli.auth import DEFAULT_XAI_OAUTH_BASE_URL
 
-from hermes_oauth_proxy.adapters.base import UpstreamAdapter, UpstreamCredential
+from hermes_composite_oauth_gateway.adapters.base import UpstreamAdapter, UpstreamCredential
 
 logger = logging.getLogger(__name__)
 

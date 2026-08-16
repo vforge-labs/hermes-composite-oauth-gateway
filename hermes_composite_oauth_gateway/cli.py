@@ -1,4 +1,4 @@
-"""Command-line interface for the standalone Hermes OAuth proxy."""
+"""Command-line interface for the standalone Hermes Composite OAuth gateway."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ import asyncio
 import sys
 from typing import Sequence
 
-from hermes_oauth_proxy.adapters import ADAPTERS, get_adapter
-from hermes_oauth_proxy.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback_host, run_server
+from hermes_composite_oauth_gateway.adapters import ADAPTERS, get_adapter
+from hermes_composite_oauth_gateway.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback_host, run_server
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="hermes-oauth-proxy",
+        prog="hermes-composite-oauth-gateway",
         description="Forward OpenAI-compatible requests using Hermes-managed OAuth credentials.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _status() -> int:
-    print("Hermes OAuth proxy upstream adapters")
+    print("Hermes Composite OAuth gateway upstream adapters")
     for name in sorted(ADAPTERS):
         adapter = get_adapter(name)
         authentication_status = getattr(adapter, "authentication_status", None)
@@ -76,7 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     print(
-        f"Starting Hermes OAuth proxy for {adapter.display_name}\n"
+        f"Starting Hermes Composite OAuth gateway for {adapter.display_name}\n"
         f"  Listening on: http://{args.host}:{args.port}/v1\n"
         "  The client bearer is discarded; Hermes supplies the upstream credential.",
         file=sys.stderr,
