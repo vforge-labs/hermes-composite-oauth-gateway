@@ -1,13 +1,16 @@
 [Unit]
-Description=Hermes OAuth Subscription Proxy
+Description=Hermes Composite OAuth Gateway
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=exec
 Environment=HERMES_HOME=%h/.hermes
-WorkingDirectory=%h
-ExecStart=%h/.local/bin/hermes-composite-oauth-gateway start --provider composite --host 127.0.0.1 --port 8645
+# Keep the gateway source outside Hermes' managed virtualenv. Hermes Agent
+# supplies its imports from its checkout; dependencies come from its venv.
+Environment=PYTHONPATH=%h/src/hermes-composite-oauth-gateway:%h/.hermes/hermes-agent
+WorkingDirectory=%h/src/hermes-composite-oauth-gateway
+ExecStart=%h/.hermes/hermes-agent/venv/bin/python -m hermes_composite_oauth_gateway start --provider composite --host 127.0.0.1 --port 8645
 Restart=on-failure
 RestartSec=5
 

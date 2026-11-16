@@ -53,6 +53,17 @@ export PYTHONPATH=/path/to/hermes-agent:/path/to/hermes-composite-oauth-gateway
 python -m hermes_composite_oauth_gateway status
 ```
 
+### Persistent service deployment
+
+For a long-running service, avoid relying only on a wheel installed into Hermes Agent's managed virtualenv: that environment may be regenerated during an Agent update, removing locally installed packages. Keep this gateway checkout in a stable directory and run its module from the Hermes virtualenv, with both source trees on `PYTHONPATH`. The example unit assumes the gateway is cloned to `~/src/hermes-composite-oauth-gateway` and Hermes Agent is checked out at `~/.hermes/hermes-agent`; edit those paths in the unit if your installation differs.
+
+```bash
+git clone https://github.com/vforge-labs/hermes-composite-oauth-gateway.git \
+  ~/src/hermes-composite-oauth-gateway
+```
+
+Install `examples/hermes-composite-oauth-gateway.service` under `~/.config/systemd/user/`, then verify the resolved `PYTHONPATH`, `ExecStart`, Python environment, and `/health` before enabling or restarting any production service. The unit uses the repository's `python -m hermes_composite_oauth_gateway` entry point, so it does not depend on the gateway distribution remaining installed inside Hermes' managed virtualenv.
+
 ## Run safely
 
 Prove the new gateway on a temporary loopback port before changing any service:
